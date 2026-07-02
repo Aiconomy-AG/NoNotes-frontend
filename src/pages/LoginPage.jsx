@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, register } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -11,20 +11,30 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [mode, setMode] = useState('login');
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
     setSubmitting(true);
     try {
-      await login(username, password);
+      if (mode === 'login') {
+        await login(username, password);
+      } else {
+        await register(username, password);
+      }
       const dest = location.state?.from?.pathname || '/notes';
       navigate(dest, { replace: true });
     } catch (err) {
       if (err.response?.status === 422) {
-        setError(err.response.data?.errors?.username?.[0] || 'Wrong username or password.');
+        const errors = err.response.data?.errors || {};
+        setError(
+          errors.username?.[0] ||
+            errors.password?.[0] ||
+            'Could not complete the request.'
+        );
       } else {
-        setError('Could not sign in. Try again.');
+        setError(mode === 'login' ? 'Could not sign in. Try again.' : 'Could not create account. Try again.');
       }
     } finally {
       setSubmitting(false);
@@ -39,7 +49,7 @@ export default function LoginPage() {
           <h1 className="mt-2 font-display text-4xl font-bold text-white">Notes</h1>
           <div className="mx-auto mt-4 h-px w-10 bg-accent" />
           <p className="mt-4 font-mono text-xs uppercase tracking-widest text-white/40">
-            Sign in to continue
+            {mode === 'login' ? 'Sign in to continue' : 'Create an account'}
           </p>
         </div>
 
@@ -94,8 +104,19 @@ export default function LoginPage() {
             disabled={submitting}
             className="flex w-full items-center justify-center gap-2 rounded-md bg-accent py-2.5 font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           >
-            {submitting ? 'Signing in…' : 'Sign in'}
+            {submitting ? (mode === 'login' ? 'Signing in…' : 'Creating…') : mode === 'login' ? 'Sign in' : 'Create account'}
             {!submitting && <span aria-hidden="true">→</span>}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setError('');
+              setMode(mode === 'login' ? 'register' : 'login');
+            }}
+            className="mt-4 w-full font-mono text-xs uppercase tracking-widest text-white/40 hover:text-accent"
+          >
+            {mode === 'login' ? 'Need an account?' : 'Have an account?'}
           </button>
         </form>
       </div>
