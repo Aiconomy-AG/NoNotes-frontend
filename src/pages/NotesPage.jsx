@@ -8,6 +8,7 @@ export default function NotesPage() {
   const { user, logout } = useAuth();
   const [notes, setNotes] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -34,6 +35,10 @@ export default function NotesPage() {
 
   const selectedIndex = notes.findIndex((n) => n.id === selectedId);
   const selectedNote = selectedIndex >= 0 ? notes[selectedIndex] : null;
+  const filteredNotes = notes.filter((note) => {
+    const title = note.title || 'Untitled';
+    return title.toLowerCase().includes(searchTerm.trim().toLowerCase());
+  });
 
   async function handleCreate() {
     const draft = { title: 'Untitled', blocks: [{ type: 'paragraph', text: '' }] };
@@ -81,12 +86,14 @@ export default function NotesPage() {
   return (
     <div className="flex h-screen bg-background">
       <NotesSidebar
-        notes={notes}
+        notes={filteredNotes}
         selectedId={selectedId}
         onSelect={setSelectedId}
         onCreate={handleCreate}
         user={user}
         onLogout={logout}
+        searchTerm={searchTerm}
+        onSearchTermChange={setSearchTerm}
       />
 
       <main className="flex-1 overflow-hidden px-10 py-8">

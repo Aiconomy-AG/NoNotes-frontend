@@ -1,4 +1,13 @@
-export default function NotesSidebar({ notes, selectedId, onSelect, onCreate, user, onLogout }) {
+export default function NotesSidebar({
+  notes,
+  selectedId,
+  onSelect,
+  onCreate,
+  user,
+  onLogout,
+  searchTerm,
+  onSearchTermChange,
+}) {
   return (
     <aside className="flex h-full w-72 flex-col border-r border-border bg-surface">
       <div className="flex items-center justify-between border-b border-border px-5 py-5">
@@ -16,10 +25,24 @@ export default function NotesSidebar({ notes, selectedId, onSelect, onCreate, us
         </button>
       </div>
 
+      <div className="border-b border-border px-5 py-4">
+        <label className="sr-only" htmlFor="note-search">
+          Search notes by title
+        </label>
+        <input
+          id="note-search"
+          type="search"
+          value={searchTerm}
+          onChange={(e) => onSearchTermChange(e.target.value)}
+          placeholder="Search titles"
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-white outline-none transition-colors placeholder:text-white/30 focus:border-accent"
+        />
+      </div>
+
       <ul className="flex-1 overflow-y-auto py-2">
         {notes.length === 0 && (
           <li className="px-5 py-6 text-center font-mono text-xs uppercase tracking-widest text-white/30">
-            No entries yet
+            {searchTerm ? 'No matches' : 'No entries yet'}
           </li>
         )}
         {notes.map((note, index) => {
