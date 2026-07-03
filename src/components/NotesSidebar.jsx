@@ -1,5 +1,5 @@
 import { ChevronDown, FileText, Folder, FolderPlus, LogOut, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 function buildFolderTree(folders) {
   const nodes = folders.map((folder) => ({ ...folder, children: [] }));
@@ -52,6 +52,11 @@ export default function NotesSidebar({
 }) {
   const [expanded, setExpanded] = useState(() => new Set());
   const [dragOverId, setDragOverId] = useState('root');
+  const [draftParentId, setDraftParentId] = useState(undefined);
+  const [draftName, setDraftName] = useState('');
+  const [editingFolderId, setEditingFolderId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const folderInputRef = useRef(null);
   const folderTree = useMemo(() => buildFolderTree(folders), [folders]);
   const notesByFolder = useMemo(() => {
     const grouped = new Map();
@@ -61,6 +66,11 @@ export default function NotesSidebar({
     });
     return grouped;
   }, [notes]);
+
+  useEffect(() => {
+    folderInputRef.current?.focus();
+    folderInputRef.current?.select();
+  }, [draftParentId, editingFolderId]);
 
   function toggleExpanded(id) {
     setExpanded((prev) => {
@@ -110,6 +120,72 @@ export default function NotesSidebar({
     setDragOverId(null);
   }
 
+  function beginCreateFolder(parentId = null) {
+    setEditingFolderId(null);
+    setDraftParentId(parentId);
+    setDraftName('');
+    if (parentId !== null) {
+      setExpanded((prev) => new Set(prev).add(parentId));
+    }
+  }
+
+  async function commitCreateFolder() {
+    if (draftParentId === undefined) return;
+    const name = draftName.trim() || 'Untitled folder';
+    const parentId = draftParentId;
+    setDraftParentId(undefined);
+    setDraftName('');
+    const created = await onCreateFolder(parentId, name);
+    if (created?.id && parentId !== null) {
+      setExpanded((prev) => new Set(prev).add(parentId));
+    }
+  }
+
+  function beginRenameFolder(folder) {
+    setDraftParentId(null);
+    setEditingFolderId(folder.id);
+    setEditingName(folder.name || '');
+  }
+
+  async function commitRenameFolder(folder) {
+    if (editingFolderId === null) return;
+    const name = editingName.trim() || 'Untitled folder';
+    setEditingFolderId(null);
+    setEditingName('');
+    await onRenameFolder(folder, name);
+  }
+
+  function cancelFolderInput() {
+    setDraftParentId(undefined);
+    setDraftName('');
+    setEditingFolderId(null);
+    setEditingName('');
+  }
+
+  function handleFolderInputKeyDown(event, onCommit) {
+    if (event.key === 'Enter') onCommit();
+    if (event.key === 'Escape') cancelFolderInput();
+  }
+
+  function renderFolderInput({ depth, value, onChange, onCommit, placeholder }) {
+    return (
+      <li>
+        <div className="flex h-10 items-center gap-2 pr-3" style={{ paddingLeft: `${20 + depth * 16}px` }}>
+          <Folder className="h-4 w-4 shrink-0 text-accent" />
+          <input
+            ref={folderInputRef}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={(event) => handleFolderInputKeyDown(event, onCommit)}
+            onBlur={onCommit}
+            placeholder={placeholder}
+            className="min-w-0 flex-1 border-b border-border bg-transparent py-1 text-sm text-white outline-none placeholder:text-white/30 focus:border-accent"
+          />
+        </div>
+      </li>
+    );
+  }
+
   function renderNotes(folderId, depth) {
     const folderNotes = notesByFolder.get(folderId ?? 'root') ?? [];
     return folderNotes.map((note) => {
@@ -137,75 +213,94 @@ export default function NotesSidebar({
   function renderFolder(folder, depth = 0) {
     const isExpanded = expanded.has(folder.id) || Boolean(searchTerm);
     const dropActive = dragOverId === `folder-${folder.id}`;
+    const isEditing = editingFolderId === folder.id;
 
     return (
       <li key={`folder-${folder.id}`}>
-        <div
-          draggable
-          onDragStart={(event) => startDrag(event, { type: 'folder', id: folder.id })}
-          onDragOver={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            setDragOverId(`folder-${folder.id}`);
-          }}
-          onDragLeave={(event) => {
-            event.stopPropagation();
-            setDragOverId(null);
-          }}
-          onDrop={(event) => handleDrop(event, folder)}
-          className={`group flex h-10 items-center gap-2 pr-2 text-sm transition-colors ${
-            dropActive ? 'bg-accent/15 text-white' : 'text-white/80 hover:bg-background/50'
-          }`}
-          style={{ paddingLeft: `${12 + depth * 16}px` }}
-        >
-          <button
-            type="button"
-            onClick={() => toggleExpanded(folder.id)}
-            aria-label={isExpanded ? 'Collapse folder' : 'Expand folder'}
-            className="flex h-6 w-6 items-center justify-center rounded text-white/45 hover:text-white"
+        {isEditing ? (
+          renderFolderInput({
+            depth,
+            value: editingName,
+            onChange: setEditingName,
+            onCommit: () => commitRenameFolder(folder),
+            placeholder: 'Folder name',
+          })
+        ) : (
+          <div
+            draggable
+            onDragStart={(event) => startDrag(event, { type: 'folder', id: folder.id })}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setDragOverId(`folder-${folder.id}`);
+            }}
+            onDragLeave={(event) => {
+              event.stopPropagation();
+              setDragOverId(null);
+            }}
+            onDrop={(event) => handleDrop(event, folder)}
+            className={`group flex h-10 items-center gap-2 pr-2 text-sm transition-colors ${
+              dropActive ? 'bg-accent/15 text-white' : 'text-white/80 hover:bg-background/50'
+            }`}
+            style={{ paddingLeft: `${12 + depth * 16}px` }}
           >
-            <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
-          </button>
-          <Folder className="h-4 w-4 shrink-0 text-accent" />
-          <button type="button" onClick={() => toggleExpanded(folder.id)} className="min-w-0 flex-1 truncate text-left">
-            {folder.name}
-          </button>
-          <button
-            type="button"
-            onClick={() => onCreate(folder.id)}
-            aria-label={`Create note in ${folder.name}`}
-            className="hidden h-7 w-7 items-center justify-center rounded text-white/40 hover:bg-background hover:text-accent group-hover:flex"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onCreateFolder(folder.id)}
-            aria-label={`Create folder in ${folder.name}`}
-            className="hidden h-7 w-7 items-center justify-center rounded text-white/40 hover:bg-background hover:text-accent group-hover:flex"
-          >
-            <FolderPlus className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onRenameFolder(folder)}
-            aria-label={`Rename ${folder.name}`}
-            className="hidden h-7 w-7 items-center justify-center rounded text-white/40 hover:bg-background hover:text-accent group-hover:flex"
-          >
-            <Pencil className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onDeleteFolder(folder)}
-            aria-label={`Delete ${folder.name}`}
-            className="hidden h-7 w-7 items-center justify-center rounded text-white/40 hover:bg-background hover:text-accent group-hover:flex"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => toggleExpanded(folder.id)}
+              aria-label={isExpanded ? 'Collapse folder' : 'Expand folder'}
+              className="flex h-6 w-6 items-center justify-center rounded text-white/45 hover:text-white"
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+            </button>
+            <Folder className="h-4 w-4 shrink-0 text-accent" />
+            <button type="button" onClick={() => toggleExpanded(folder.id)} className="min-w-0 flex-1 truncate text-left">
+              {folder.name}
+            </button>
+            <button
+              type="button"
+              onClick={() => onCreate(folder.id)}
+              aria-label={`Create note in ${folder.name}`}
+              className="hidden h-7 w-7 items-center justify-center rounded text-white/40 hover:bg-background hover:text-accent group-hover:flex"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => beginCreateFolder(folder.id)}
+              aria-label={`Create folder in ${folder.name}`}
+              className="hidden h-7 w-7 items-center justify-center rounded text-white/40 hover:bg-background hover:text-accent group-hover:flex"
+            >
+              <FolderPlus className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => beginRenameFolder(folder)}
+              aria-label={`Rename ${folder.name}`}
+              className="hidden h-7 w-7 items-center justify-center rounded text-white/40 hover:bg-background hover:text-accent group-hover:flex"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDeleteFolder(folder)}
+              aria-label={`Delete ${folder.name}`}
+              className="hidden h-7 w-7 items-center justify-center rounded text-white/40 hover:bg-background hover:text-accent group-hover:flex"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         {isExpanded && (
           <ul>
             {folder.children.map((child) => renderFolder(child, depth + 1))}
+            {draftParentId === folder.id &&
+              renderFolderInput({
+                depth: depth + 1,
+                value: draftName,
+                onChange: setDraftName,
+                onCommit: commitCreateFolder,
+                placeholder: 'New folder',
+              })}
             {renderNotes(folder.id, depth + 1)}
           </ul>
         )}
@@ -225,7 +320,7 @@ export default function NotesSidebar({
         <div className="flex gap-2">
           <button
             type="button"
-            onClick={() => onCreateFolder(null)}
+            onClick={() => beginCreateFolder(null)}
             aria-label="New folder"
             className="flex h-9 w-9 items-center justify-center rounded-md border border-border text-white/70 hover:border-accent hover:text-accent"
           >
@@ -272,6 +367,14 @@ export default function NotesSidebar({
         )}
         <ul>
           {folderTree.map((folder) => renderFolder(folder))}
+          {draftParentId === null &&
+            renderFolderInput({
+              depth: 0,
+              value: draftName,
+              onChange: setDraftName,
+              onCommit: commitCreateFolder,
+              placeholder: 'New folder',
+            })}
           {renderNotes(null, 0)}
         </ul>
       </div>

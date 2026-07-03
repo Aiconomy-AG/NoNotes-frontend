@@ -54,27 +54,27 @@ export default function NotesPage() {
     }
   }
 
-  async function handleCreateFolder(parentId = null) {
-    const name = window.prompt('Folder name');
-    if (name === null) return;
+  async function handleCreateFolder(parentId = null, name = 'Untitled folder') {
     try {
       const res = await api.post('/api/folders', { name, parent_id: parentId });
       const created = res.data.data || res.data;
       setFolders((prev) => [...prev, created]);
+      return created;
     } catch {
       setError('Could not create folder.');
+      return null;
     }
   }
 
-  async function handleRenameFolder(folder) {
-    const name = window.prompt('Folder name', folder.name);
-    if (name === null) return;
+  async function handleRenameFolder(folder, name) {
     try {
       const res = await api.put(`/api/folders/${folder.id}`, { name });
       const saved = res.data.data || res.data;
       setFolders((prev) => prev.map((f) => (f.id === saved.id ? saved : f)));
+      return saved;
     } catch {
       setError('Could not rename folder.');
+      return null;
     }
   }
 
